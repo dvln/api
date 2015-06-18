@@ -23,12 +23,12 @@ package api
 // (exception: cast testing file which uses 'testify')
 import (
 	"bytes"
-	"dvln/lib/out"
 	"encoding/json"
+	"fmt"
 	"os"
 
-	"github.com/mgutz/str"
-	"github.com/spf13/cast"
+	"github.com/dvln/str"
+	"github.com/dvln/cast"
 )
 
 var jsonIndentLevel = 2
@@ -98,32 +98,92 @@ func PrettyJSON(b []byte, fmt ...string) (string, error) {
 	return cast.ToString(out.Bytes()) + "\n", err
 }
 
+// rawFatalJSONMsg is for cases where Marshal is failing so we need
+// some JSON we can dump on the output... if we get to this level then
+// what we're generating is a valid JSON error basically (shouldn't happen)
+func rawFatalJSONMsg(apiVer string, msg Msg) string {
+	rawJSON := fmt.Sprintf("{ \"apiVersion\":\"%s\", \"id\": -1, \"error\": { \"message\": \"%s\", \"code\": %d, \"level\": \"%s\" } }", apiVer, msg.Message, msg.Code, msg.Level)
+	output, err := PrettyJSON([]byte(rawJSON))
+	if err != nil {
+		output = rawJSON
+	}
+	return output
+}
+
 // GetJSONString takes the various things needed from a DVLN api call and
 // combines everything into a passable JSON string (pretty or not depending
 // upon settings) and returns that representation to the caller.
-func GetJSONString(apiVer string, context string, kind string, verbosity string, fields []string, items []interface{}) string {
-	// FIXME: eriknow: ideally errors should result in a JSON "string" that is a
-	//        normal JSON error being returned... see ~/dvln.txt for example
+func GetJSONString(apiVer string, context string, kind string, verbosity string, fields []string, items []interface{}) (string, bool) {
+	var j []byte
+	var err error
+	var output, rawJSON string
+	var errMsg, warnMsg Msg
+	fatalErr := false
+
 	if apiVer == "" {
 		// In case the API version couldn't be passed, last ditch try
 		apiVer = os.Getenv("PKG_API_APIVER")
 		if apiVer == "" {
-			out.Fatalln("No API version was available to GetJSONString(), failing")
+			apiVer = "?.?"
+			errMsg.Message = "No valid JSON API version is available"
+			errMsg.Code = 1001
+			errMsg.Level = "FATAL"
+			fatalErr = true
 		}
 	}
-	apiRoot := NewRoot(apiVer, context).SetAPIItems(kind, verbosity, fields, items)
-	j, err := json.Marshal(apiRoot)
-	if err != nil {
-		out.Issuef("Failed to convert %s (%s) items to JSON: %s\n", context, kind, err)
-		return ""
+	apiRoot := newAPIData(apiVer, context)
+	if errMsg.Message == "" && storedFatal.Message != "" {
+		errMsg = storedFatal
+		fatalErr = true
+	} else if errMsg.Message == "" && storedWarning.Message != "" {
+		warnMsg = storedWarning
 	}
-	var str string
+	if errMsg.Message == "" {
+		// if no errors so far then add in our items and 'data' details
+		apiRoot.SetAPIItems(kind, verbosity, fields, items)
+		if warnMsg.Message != "" {
+			apiRoot.Warning = warnMsg
+		}
+	} else {
+		// otherwise indicate issue and encode that into JSON
+		apiRoot.ID = -1
+		apiRoot.Error = errMsg
+	}
+	j, err = json.Marshal(apiRoot)
+	if err != nil {
+		if errMsg.Message == "" {
+			errMsg.Message = "Unable to marshal basic JSON API string"
+			errMsg.Code = 1002
+			errMsg.Level = "FATAL"
+			fatalErr = true
+		}
+		// hack: hard code some JSON and return an error... shouldn't happen
+		rawJSON = rawFatalJSONMsg(apiVer, errMsg)
+		return rawJSON, fatalErr
+	}
 	// put in indentation and formatting, can turn that off as well
 	// if desired via the "jsonraw" glob (viper) setting
-	str, err = PrettyJSON(j)
+	output, err = PrettyJSON(j)
 	if err != nil {
-		out.Issueln("Unable to beautify JSON output:", err)
-		return ""
+		warnMsg.Message = fmt.Sprint("Unable to beautify JSON output: %s", err)
+		warnMsg.Code = 1003
+		warnMsg.Level = "ISSUE"
+		apiRoot.Warning = warnMsg
+		j, err = json.Marshal(apiRoot)
+		// if 1st marshal ok but pretty failed, add warning to JSON and if basic
+		// re-Marshal fails for any reason "bump" to a FATAL error, unlikely:
+		if err != nil {
+			// not a warning any more, scale it up to fatal error
+			warnMsg.Level = "FATAL"
+			fatalErr = true
+			rawJSON = rawFatalJSONMsg(apiVer, warnMsg)
+			return rawJSON, fatalErr
+		}
+		// retry pretty probably won't work again, if not just use raw json
+		output, err = PrettyJSON(j)
+		if err != nil {
+			output = cast.ToString(j)
+		}
 	}
-	return str
+	return output, fatalErr
 }
