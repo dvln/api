@@ -23,12 +23,13 @@ package api
 // (exception: cast testing file which uses 'testify')
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 
-	"github.com/dvln/str"
 	"github.com/dvln/cast"
+	"github.com/dvln/str"
 )
 
 var jsonIndentLevel = 2
@@ -98,11 +99,34 @@ func PrettyJSON(b []byte, fmt ...string) (string, error) {
 	return cast.ToString(out.Bytes()) + "\n", err
 }
 
-// rawFatalJSONMsg is for cases where Marshal is failing so we need
+// EscapeCtrl escapes control chars in a string so JSON likes em
+func EscapeCtrl(ctrl []byte) (esc []byte) {
+	u := []byte(`\u0000`)
+	for i, ch := range ctrl {
+		if ch <= 31 {
+			if esc == nil {
+				esc = append(make([]byte, 0, len(ctrl)+len(u)), ctrl[:i]...)
+			}
+			esc = append(esc, u...)
+			hex.Encode(esc[len(esc)-2:], ctrl[i:i+1])
+			continue
+		}
+		if esc != nil {
+			esc = append(esc, ch)
+		}
+	}
+	if esc == nil {
+		return ctrl
+	}
+	return esc
+}
+
+// FatalJSONMsg is for cases where Marshal is failing so we need
 // some JSON we can dump on the output... if we get to this level then
 // what we're generating is a valid JSON error basically (shouldn't happen)
-func rawFatalJSONMsg(apiVer string, msg Msg) string {
-	rawJSON := fmt.Sprintf("{ \"apiVersion\":\"%s\", \"id\": -1, \"error\": { \"message\": \"%s\", \"code\": %d, \"level\": \"%s\" } }", apiVer, msg.Message, msg.Code, msg.Level)
+func FatalJSONMsg(apiVer string, msg Msg) string {
+	cleanMsg := EscapeCtrl([]byte(msg.Message))
+	rawJSON := fmt.Sprintf("{ \"apiVersion\":\"%s\", \"id\": -1, \"error\": { \"message\": \"%s\", \"code\": %d, \"level\": \"%s\" } }", apiVer, cleanMsg, msg.Code, msg.Level)
 	output, err := PrettyJSON([]byte(rawJSON))
 	if err != nil {
 		output = rawJSON
@@ -110,10 +134,10 @@ func rawFatalJSONMsg(apiVer string, msg Msg) string {
 	return output
 }
 
-// GetJSONString takes the various things needed from a DVLN api call and
+// GetJSONOutput takes the various things needed from a DVLN api call and
 // combines everything into a passable JSON string (pretty or not depending
 // upon settings) and returns that representation to the caller.
-func GetJSONString(apiVer string, context string, kind string, verbosity string, fields []string, items []interface{}) (string, bool) {
+func GetJSONOutput(apiVer string, context string, kind string, verbosity string, fields []string, items []interface{}) (string, bool) {
 	var j []byte
 	var err error
 	var output, rawJSON string
@@ -158,14 +182,14 @@ func GetJSONString(apiVer string, context string, kind string, verbosity string,
 			fatalErr = true
 		}
 		// hack: hard code some JSON and return an error... shouldn't happen
-		rawJSON = rawFatalJSONMsg(apiVer, errMsg)
+		rawJSON = FatalJSONMsg(apiVer, errMsg)
 		return rawJSON, fatalErr
 	}
 	// put in indentation and formatting, can turn that off as well
-	// if desired via the "jsonraw" glob (viper) setting
+	// if desired via the "jsonraw" globs (viper) setting
 	output, err = PrettyJSON(j)
 	if err != nil {
-		warnMsg.Message = fmt.Sprint("Unable to beautify JSON output: %s", err)
+		warnMsg.Message = fmt.Sprintf("Unable to beautify JSON output: %s", err)
 		warnMsg.Code = 1003
 		warnMsg.Level = "ISSUE"
 		apiRoot.Warning = warnMsg
@@ -176,7 +200,7 @@ func GetJSONString(apiVer string, context string, kind string, verbosity string,
 			// not a warning any more, scale it up to fatal error
 			warnMsg.Level = "FATAL"
 			fatalErr = true
-			rawJSON = rawFatalJSONMsg(apiVer, warnMsg)
+			rawJSON = FatalJSONMsg(apiVer, warnMsg)
 			return rawJSON, fatalErr
 		}
 		// retry pretty probably won't work again, if not just use raw json
@@ -185,5 +209,6 @@ func GetJSONString(apiVer string, context string, kind string, verbosity string,
 			output = cast.ToString(j)
 		}
 	}
+	// Return the output (typically), fatalErr is false if we get to here
 	return output, fatalErr
 }

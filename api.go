@@ -30,10 +30,10 @@ type JSONLog struct {
 */
 
 // apiData is a structure mapping to the "root" API settings (currently the
-// API is dumped in JSON format).  If field aren't provided then they will
+// API is dumped in JSON format).  If fields aren't provided then they will
 // not be shown but one must have APIVersion defined (and ID will come back
-// as 0 if not later set meaning "success" as it maps to the exit value of
-// the tool essentially)
+// as 0 if not later set, ie: 0 means "success" as it maps to the exit value
+// of the tool essentially)
 type apiData struct {
 	APIVersion string      `json:"apiVersion"`
 	Context    string      `json:"context,omitempty"`
@@ -43,8 +43,8 @@ type apiData struct {
 	Error      interface{} `json:"error,omitempty"`
 }
 
-// Msg is used typically to store an API error or warning message, see up
-// the basic data and use SetErrorMsg() or SetWarningMsg() methods
+// Msg is used typically to store an API error or warning message, set up
+// the basic data and use SetStoredFatal() or SetStoredWarning() methods
 type Msg struct {
 	Message string `json:"message"`
 	Code    int    `json:"code,omitempty"`
@@ -59,7 +59,7 @@ var storedWarning Msg
 // a JSON message... if this is set the message field must NOT
 // be empty (at least) and it will result in a non-zero exit
 // and a -1 'id' field setting in the JSON output along with
-// the "error" JSOn field being set
+// the "error" JSON field being set
 func SetStoredFatal(msg Msg) {
 	storedFatal = msg
 }
