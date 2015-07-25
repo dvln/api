@@ -124,9 +124,18 @@ func EscapeCtrl(ctrl []byte) (esc []byte) {
 // FatalJSONMsg is for cases where Marshal is failing so we need
 // some JSON we can dump on the output... if we get to this level then
 // what we're generating is a valid JSON error basically (shouldn't happen)
-func FatalJSONMsg(apiVer string, msg Msg) string {
-	cleanMsg := EscapeCtrl([]byte(msg.Message))
-	rawJSON := fmt.Sprintf("{ \"apiVersion\":\"%s\", \"id\": -1, \"error\": { \"message\": \"%s\", \"code\": %d, \"level\": \"%s\" } }", apiVer, cleanMsg, msg.Code, msg.Level)
+func FatalJSONMsg(apiVer string, errMsg Msg) string {
+	cleanErrMsg := EscapeCtrl([]byte(errMsg.Message))
+	var rawJSON string
+	cmdError := -1
+	if storedNonFatalWarning.Message != "" {
+		warnMsg := storedNonFatalWarning
+		//erikfun
+		cleanWarnMsg := EscapeCtrl([]byte(warnMsg.Message))
+		rawJSON = fmt.Sprintf("{ \"apiVersion\":\"%s\", \"id\": %d, \"warning\": { \"message\": \"%s\", \"code\": \"%d\", \"level\": \"%s\"}, \"error\": { \"message\": \"%s\", \"code\": %d, \"level\": \"%s\" } }", apiVer, cmdError, cleanWarnMsg, warnMsg.Code, warnMsg.Level, cleanErrMsg, errMsg.Code, errMsg.Level)
+	} else {
+		rawJSON = fmt.Sprintf("{ \"apiVersion\":\"%s\", \"id\": %d, \"error\": { \"message\": \"%s\", \"code\": %d, \"level\": \"%s\" } }", apiVer, cmdError, cleanErrMsg, errMsg.Code, errMsg.Level)
+	}
 	output, err := PrettyJSON([]byte(rawJSON))
 	if err != nil {
 		output = rawJSON
@@ -135,8 +144,11 @@ func FatalJSONMsg(apiVer string, msg Msg) string {
 }
 
 // GetJSONOutput takes the various things needed from a DVLN api call and
-// combines everything into a passable JSON string (pretty or not depending
-// upon settings) and returns that representation to the caller.
+// combines pertinent details into a JSON "results" string (pretty or not
+// depending upon settings) and returns that representation to the caller.
+// It will return a boolean indicating if a fatal occurred (if so the err
+// will be encoded in the JSON being returned already, print the string and
+// exit non-zero basically if you get false back in the boolean)
 func GetJSONOutput(apiVer string, context string, kind string, verbosity string, fields []string, items []interface{}) (string, bool) {
 	var j []byte
 	var err error
@@ -156,11 +168,11 @@ func GetJSONOutput(apiVer string, context string, kind string, verbosity string,
 		}
 	}
 	apiRoot := newAPIData(apiVer, context)
-	if errMsg.Message == "" && storedFatal.Message != "" {
-		errMsg = storedFatal
+	if errMsg.Message == "" && storedFatalError.Message != "" {
+		errMsg = storedFatalError
 		fatalErr = true
-	} else if errMsg.Message == "" && storedWarning.Message != "" {
-		warnMsg = storedWarning
+	} else if errMsg.Message == "" && storedNonFatalWarning.Message != "" {
+		warnMsg = storedNonFatalWarning
 	}
 	if errMsg.Message == "" {
 		// if no errors so far then add in our items and 'data' details

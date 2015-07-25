@@ -44,34 +44,53 @@ type apiData struct {
 }
 
 // Msg is used typically to store an API error or warning message, set up
-// the basic data and use SetStoredFatal() or SetStoredWarning() methods
+// the basic data and use SetStoredFatalError() or SetStoredNonFatalWarning()
+// routines
 type Msg struct {
 	Message string `json:"message"`
 	Code    int    `json:"code,omitempty"`
 	Level   string `json:"level,omitempty"`
 }
 
-var storedFatal Msg
-var storedWarning Msg
+var storedFatalError Msg
+var storedNonFatalWarning Msg
 
-// SetStoredFatal allows one to store a fatal error which
+// NewMsg creates a Msg struct for use in errors and warnings such
+// that they can be stored in JSON format when it is finally dumped
+func NewMsg(msg string, code int, level string) Msg {
+	return Msg{Message: msg, Code: code, Level: level}
+}
+
+// SetStoredFatalError allows one to store a fatal error which
 // will be picked up by any 'api' pkg routine that is building
 // a JSON message... if this is set the message field must NOT
 // be empty (at least) and it will result in a non-zero exit
 // and a -1 'id' field setting in the JSON output along with
 // the "error" JSON field being set
-func SetStoredFatal(msg Msg) {
-	storedFatal = msg
+func SetStoredFatalError(msg Msg) {
+	storedFatalError = msg
 }
 
-// SetStoredWarning allows one to store a warning message which
+// SetStoredNonFatalWarning allows one to store a warning message which
 // will be added to any JSON generated via the 'api' package.  It's
 // mostly just informative though as it will still encode and return
 // all other results and items in the JSON structure but at least the
 // client can see something of interest might need some follow up with
-// the server hosting side before it becomes fatal class errors.
-func SetStoredWarning(msg Msg) {
-	storedWarning = msg
+// the server hosting side before it becomes a fatal class error perhaps.
+func SetStoredNonFatalWarning(msg Msg, defCode ...int) {
+	defaultCode := 0
+	if defCode != nil {
+		defaultCode = defCode[0]
+	}
+	if storedNonFatalWarning.Message != "" {
+		msg.Message = msg.Message + storedNonFatalWarning.Message
+		if msg.Code == 0 || msg.Code == defaultCode {
+			if !(storedNonFatalWarning.Code == 0 || storedNonFatalWarning.Code == defaultCode) {
+				msg.Code = storedNonFatalWarning.Code
+			}
+		}
+	}
+	storedNonFatalWarning = msg
 }
 
 // newAPIData basically sets up a new API "root" structure which contains the
