@@ -33,10 +33,10 @@ type apiData struct {
 	APIVersion string      `json:"apiVersion"`
 	Context    string      `json:"context,omitempty"`
 	ID         int         `json:"id"`
-	Data       interface{} `json:"data,omitempty"`
 	Note       interface{} `json:"note,omitempty"`
 	Warning    interface{} `json:"warning,omitempty"`
 	Error      interface{} `json:"error,omitempty"`
+	Data       interface{} `json:"data,omitempty"`
 }
 
 // Msg is used typically to store an API error or warning message, set up
