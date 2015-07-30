@@ -21,13 +21,8 @@ package api
 // note that str and cast have no dependencies outside the std lib
 // (exception: cast testing file which uses 'testify')
 
-/* FIXME: stuff to log in a usage log... but not always returned
-          for basic JSON queries at this point
-type JSONLog struct {
-	startTime
-	endTime
-}
-*/
+// TESTING: this package (all files) needs plenty of testing and
+//          is really a bit of a hack at this point
 
 // apiData is a structure mapping to the "root" API settings (currently the
 // API is dumped in JSON format).  If fields aren't provided then they will
@@ -39,13 +34,14 @@ type apiData struct {
 	Context    string      `json:"context,omitempty"`
 	ID         int         `json:"id"`
 	Data       interface{} `json:"data,omitempty"`
+	Note       interface{} `json:"note,omitempty"`
 	Warning    interface{} `json:"warning,omitempty"`
 	Error      interface{} `json:"error,omitempty"`
 }
 
 // Msg is used typically to store an API error or warning message, set up
-// the basic data and use SetStoredFatalError() or SetStoredNonFatalWarning()
-// routines
+// the basic data and use SetStoredFatalError(), SetStoredNonFatalWarning()
+// and SetStoredNote() routines to stash these.
 type Msg struct {
 	Message string `json:"message"`
 	Code    int    `json:"code,omitempty"`
@@ -54,6 +50,7 @@ type Msg struct {
 
 var storedFatalError Msg
 var storedNonFatalWarning Msg
+var storedNote Msg
 
 // NewMsg creates a Msg struct for use in errors and warnings such
 // that they can be stored in JSON format when it is finally dumped
@@ -91,6 +88,30 @@ func SetStoredNonFatalWarning(msg Msg, defCode ...int) {
 		}
 	}
 	storedNonFatalWarning = msg
+}
+
+// SetStoredNote allows one to store a "note" message which
+// will be added to any JSON generated via the 'api' package.
+// This is informative and can be used by the client as they
+// see fit.  Example, output is logged to some tmp logfile
+// and a note is being attached as to where that log file is.
+// Use api.NewMsg to create a Msg and note that the defCode
+// for dvln should probably be out.DefaultErrCode() (although
+// for notes the code isn't really an error, but it's ok)
+func SetStoredNote(msg Msg, defCode ...int) {
+	defaultCode := 0
+	if defCode != nil {
+		defaultCode = defCode[0]
+	}
+	if storedNote.Message != "" {
+		msg.Message = msg.Message + storedNote.Message
+		if msg.Code == 0 || msg.Code == defaultCode {
+			if !(storedNote.Code == 0 || storedNote.Code == defaultCode) {
+				msg.Code = storedNote.Code
+			}
+		}
+	}
+	storedNote = msg
 }
 
 // newAPIData basically sets up a new API "root" structure which contains the

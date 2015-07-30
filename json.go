@@ -99,11 +99,11 @@ func PrettyJSON(b []byte, fmt ...string) (string, error) {
 	return cast.ToString(out.Bytes()) + "\n", err
 }
 
-// EscapeCtrl escapes control chars in a string so JSON likes em
-func EscapeCtrl(ctrl []byte) (esc []byte) {
+// EscapeJSONString escapes control chars in a string so JSON likes em
+func EscapeJSONString(ctrl []byte) (esc []byte) {
 	u := []byte(`\u0000`)
 	for i, ch := range ctrl {
-		if ch <= 31 {
+		if ch <= 31 || ch == 34 {
 			if esc == nil {
 				esc = append(make([]byte, 0, len(ctrl)+len(u)), ctrl[:i]...)
 			}
@@ -121,21 +121,43 @@ func EscapeCtrl(ctrl []byte) (esc []byte) {
 	return esc
 }
 
+// encodeMsginRawJSON takes the flavor of the Msg ("error", "warning" or "note")
+// and the message and returns a JSON encoded string with no preceeding or
+// following comments
+func encodeMsgInRawJSON(flavor string, msg Msg) string {
+	if msg.Message == "" {
+		return ""
+	}
+	cleanMsg := EscapeJSONString([]byte(msg.Message))
+	rawJSON := fmt.Sprintf("\"%s\": { \"message\": \"%s\", \"code\": %d, \"level\": \"%s\"}", flavor, cleanMsg, msg.Code, msg.Level)
+	return rawJSON
+}
+
 // FatalJSONMsg is for cases where Marshal is failing so we need
 // some JSON we can dump on the output... if we get to this level then
 // what we're generating is a valid JSON error basically (shouldn't happen)
 func FatalJSONMsg(apiVer string, errMsg Msg) string {
-	cleanErrMsg := EscapeCtrl([]byte(errMsg.Message))
-	var rawJSON string
-	cmdError := -1
-	if storedNonFatalWarning.Message != "" {
-		warnMsg := storedNonFatalWarning
-		//erikfun
-		cleanWarnMsg := EscapeCtrl([]byte(warnMsg.Message))
-		rawJSON = fmt.Sprintf("{ \"apiVersion\":\"%s\", \"id\": %d, \"warning\": { \"message\": \"%s\", \"code\": \"%d\", \"level\": \"%s\"}, \"error\": { \"message\": \"%s\", \"code\": %d, \"level\": \"%s\" } }", apiVer, cmdError, cleanWarnMsg, warnMsg.Code, warnMsg.Level, cleanErrMsg, errMsg.Code, errMsg.Level)
-	} else {
-		rawJSON = fmt.Sprintf("{ \"apiVersion\":\"%s\", \"id\": %d, \"error\": { \"message\": \"%s\", \"code\": %d, \"level\": \"%s\" } }", apiVer, cmdError, cleanErrMsg, errMsg.Code, errMsg.Level)
+	noteMsgJSON := encodeMsgInRawJSON("note", storedNote)
+	warnMsgJSON := encodeMsgInRawJSON("warning", storedNonFatalWarning)
+	errMsgJSON := encodeMsgInRawJSON("error", errMsg)
+	// we really need an error, try global setting else fallback to unknown
+	if errMsgJSON == "" {
+		errMsgJSON = encodeMsgInRawJSON("error", storedFatalError)
+		if errMsgJSON == "" {
+			errMsg = NewMsg("Unknown Fatal Error (Coding Error?)", 0, "UNKNOWN")
+			errMsgJSON = encodeMsgInRawJSON("error", errMsg)
+		}
 	}
+	msgsJSON := ""
+	if noteMsgJSON != "" {
+		msgsJSON = fmt.Sprintf("%s, ", noteMsgJSON)
+	}
+	if warnMsgJSON != "" {
+		msgsJSON = fmt.Sprintf("%s%s, ", msgsJSON, warnMsgJSON)
+	}
+	msgsJSON = fmt.Sprintf("%s%s", msgsJSON, errMsgJSON)
+	cmdError := -1
+	rawJSON := fmt.Sprintf("{ \"apiVersion\":\"%s\", \"id\": %d, %s }", apiVer, cmdError, msgsJSON)
 	output, err := PrettyJSON([]byte(rawJSON))
 	if err != nil {
 		output = rawJSON
@@ -153,7 +175,7 @@ func GetJSONOutput(apiVer string, context string, kind string, verbosity string,
 	var j []byte
 	var err error
 	var output, rawJSON string
-	var errMsg, warnMsg Msg
+	var errMsg, warnMsg, noteMsg Msg
 	fatalErr := false
 
 	if apiVer == "" {
@@ -170,15 +192,30 @@ func GetJSONOutput(apiVer string, context string, kind string, verbosity string,
 	apiRoot := newAPIData(apiVer, context)
 	if errMsg.Message == "" && storedFatalError.Message != "" {
 		errMsg = storedFatalError
+		cleanErrMsg := EscapeJSONString([]byte(errMsg.Message))
+		errMsg.Message = string(cleanErrMsg)
 		fatalErr = true
-	} else if errMsg.Message == "" && storedNonFatalWarning.Message != "" {
+	}
+	if storedNonFatalWarning.Message != "" {
 		warnMsg = storedNonFatalWarning
+		cleanWarnMsg := EscapeJSONString([]byte(warnMsg.Message))
+		warnMsg.Message = string(cleanWarnMsg)
+	}
+	if storedNote.Message != "" {
+		noteMsg = storedNote
+		cleanNoteMsg := EscapeJSONString([]byte(noteMsg.Message))
+		noteMsg.Message = string(cleanNoteMsg)
 	}
 	if errMsg.Message == "" {
 		// if no errors so far then add in our items and 'data' details
 		apiRoot.SetAPIItems(kind, verbosity, fields, items)
 		if warnMsg.Message != "" {
+			//need to escape warning message, no ?
 			apiRoot.Warning = warnMsg
+		}
+		if noteMsg.Message != "" {
+			//need to escape warning message, no ?
+			apiRoot.Note = noteMsg
 		}
 	} else {
 		// otherwise indicate issue and encode that into JSON
