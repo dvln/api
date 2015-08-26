@@ -67,7 +67,7 @@ func JSONRaw() bool {
 }
 
 // SetJSONRaw can be used to change the indentation level for each
-// "step" in pretty JSOn output being formatted via PrettyJSON()
+// "step" in pretty JSON output being formatted via PrettyJSON()
 // being formatted via the PrettyJSON() routine.
 func SetJSONRaw(b bool) {
 	jsonRaw = b
