@@ -32,6 +32,8 @@ import (
 	"github.com/dvln/str"
 )
 
+// Some default JSON output formatting settings that can be overridden
+// via Set* API calls below.
 var jsonIndentLevel = 2
 var jsonPrefix = ""
 var jsonRaw = false
@@ -66,14 +68,15 @@ func JSONRaw() bool {
 	return jsonRaw
 }
 
-// SetJSONRaw can be used to change the indentation level for each
-// "step" in pretty JSON output being formatted via PrettyJSON()
-// being formatted via the PrettyJSON() routine.
+// SetJSONRaw can be used to change the raw JSON output mode so that
+// the JSON is cleaned up and indented so it's human readable with various
+// lines or if it's just "raw" and lumped together....if raw if false
+// then other sections of this module use PrettyJSON to pretty it up.
 func SetJSONRaw(b bool) {
 	jsonRaw = b
 }
 
-// PrettyJSON pretty prints JSON data, provide the data and that can be followed
+// PrettyJSON pretty prints JSON data.  Provide the data and that can be followed
 // by two optional arguments, a prefix string and an indent level (both of which
 // are strings).  If neither is provided then no prefix used and indent of two
 // spaces is the default (see cfgfile:jsonprefix, cfgfile:jsonindent and the
@@ -192,29 +195,21 @@ func GetJSONOutput(apiVer string, context string, kind string, verbosity string,
 	apiRoot := newAPIData(apiVer, context)
 	if errMsg.Message == "" && storedFatalError.Message != "" {
 		errMsg = storedFatalError
-		cleanErrMsg := EscapeJSONString([]byte(errMsg.Message))
-		errMsg.Message = string(cleanErrMsg)
 		fatalErr = true
 	}
 	if storedNonFatalWarning.Message != "" {
 		warnMsg = storedNonFatalWarning
-		cleanWarnMsg := EscapeJSONString([]byte(warnMsg.Message))
-		warnMsg.Message = string(cleanWarnMsg)
 	}
 	if storedNote.Message != "" {
 		noteMsg = storedNote
-		cleanNoteMsg := EscapeJSONString([]byte(noteMsg.Message))
-		noteMsg.Message = string(cleanNoteMsg)
 	}
 	if errMsg.Message == "" {
 		// if no errors so far then add in our items and 'data' details
 		apiRoot.SetAPIItems(kind, verbosity, fields, items)
 		if warnMsg.Message != "" {
-			//need to escape warning message, no ?
 			apiRoot.Warning = warnMsg
 		}
 		if noteMsg.Message != "" {
-			//need to escape warning message, no ?
 			apiRoot.Note = noteMsg
 		}
 	} else {

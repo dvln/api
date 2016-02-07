@@ -11,18 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The dvln/api/api.go module is for routines to "build up" an API structure
-// that can then be mapped to the desired format (eg: JSON) and dumped for
-// the user.  This is a hack at this point.
-
+// Package api contains routines to "build up" a "results" datastructure
+// that can easily mapped to JSON (or other) and returned to the client.
+// There are also various JSON manipulation routines.
 package api
 
 // for imports the goal is to use very little outside the std lib,
 // note that str and cast have no dependencies outside the std lib
 // (exception: cast testing file which uses 'testify')
-
-// TESTING: this package (all files) needs plenty of testing and
-//          is really a bit of a hack at this point
 
 // apiData is a structure mapping to the "root" API settings (currently the
 // API is dumped in JSON format).  If fields aren't provided then they will
@@ -115,7 +111,7 @@ func SetStoredNote(msg Msg, defCode ...int) {
 }
 
 // newAPIData basically sets up a new API "root" structure which contains the
-// API version, a given context (eg: "dvlnGlobs", "dvlnGet") and a deafult
+// API version, a given context (eg: "dvlnGlobs", "dvlnGet") and a default
 // ID of 0... along with empty pointers to Data and Error to be fleshed out
 // by the caller (data: items: [..] or error: {errdata})
 func newAPIData(apiVersion string, context string) *apiData {
