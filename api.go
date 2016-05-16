@@ -20,6 +20,10 @@ package api
 // note that str and cast have no dependencies outside the std lib
 // (exception: cast testing file which uses 'testify')
 
+import (
+	"sync"
+)
+
 // apiData is a structure mapping to the "root" API settings (currently the
 // API is dumped in JSON format).  If fields aren't provided then they will
 // not be shown but one must have APIVersion defined (and ID will come back
@@ -33,6 +37,7 @@ type apiData struct {
 	Warning    interface{} `json:"warning,omitempty"`
 	Error      interface{} `json:"error,omitempty"`
 	Data       interface{} `json:"data,omitempty"`
+	Metadata   interface{} `json:"metadata,omitempty"`
 }
 
 // Msg is used typically to store an API error or warning message, set up
@@ -44,9 +49,10 @@ type Msg struct {
 	Level   string `json:"level,omitempty"`
 }
 
-var storedFatalError Msg
-var storedNonFatalWarning Msg
-var storedNote Msg
+var (
+	mu                                                  sync.RWMutex
+	storedFatalError, storedNonFatalWarning, storedNote Msg
+)
 
 // NewMsg creates a Msg struct for use in errors and warnings such
 // that they can be stored in JSON format when it is finally dumped
@@ -61,6 +67,8 @@ func NewMsg(msg string, code int, level string) Msg {
 // and a -1 'id' field setting in the JSON output along with
 // the "error" JSON field being set
 func SetStoredFatalError(msg Msg) {
+	mu.Lock()
+	defer mu.Unlock()
 	storedFatalError = msg
 }
 
@@ -75,6 +83,8 @@ func SetStoredNonFatalWarning(msg Msg, defCode ...int) {
 	if defCode != nil {
 		defaultCode = defCode[0]
 	}
+	mu.Lock()
+	defer mu.Unlock()
 	if storedNonFatalWarning.Message != "" {
 		msg.Message = msg.Message + storedNonFatalWarning.Message
 		if msg.Code == 0 || msg.Code == defaultCode {
@@ -99,6 +109,8 @@ func SetStoredNote(msg Msg, defCode ...int) {
 	if defCode != nil {
 		defaultCode = defCode[0]
 	}
+	mu.Lock()
+	defer mu.Unlock()
 	if storedNote.Message != "" {
 		msg.Message = msg.Message + storedNote.Message
 		if msg.Code == 0 || msg.Code == defaultCode {

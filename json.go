@@ -1,4 +1,4 @@
-// Copyright © 2015 Erik Brady <brady@dvln.org>
+// Copyright © 2015-2016 Erik Brady <brady@dvln.org>
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,40 +32,55 @@ import (
 	"github.com/dvln/str"
 )
 
-// Some default JSON output formatting settings that can be overridden
-// via Set* API calls below.
-var jsonIndentLevel = 2
-var jsonPrefix = ""
-var jsonRaw = false
+var (
+	// Some default JSON output formatting settings that can be overridden
+	// via Set* API calls below (accessed under mutex from api.go)
+	jsonIndentLevel = 2
+	jsonPrefix      = ""
+	jsonRaw         = false
+)
 
 // JSONIndentLevel can be used to get the current indentation level for each
 // "step" in PrettyJSON() output (defaults to 2 currently)
 func JSONIndentLevel() int {
-	return jsonIndentLevel
+	mu.RLock()
+	defer mu.RUnlock()
+	indentLevel := jsonIndentLevel
+	return indentLevel
 }
 
 // SetJSONIndentLevel can be used to change the indentation level for each
 // "step" in pretty JSOn output being formatted via PrettyJSON()
 func SetJSONIndentLevel(level int) {
+	mu.Lock()
+	defer mu.Unlock()
 	jsonIndentLevel = level
 }
 
 // JSONPrefix can be used to get the current prefix used for any JSON string
 // being formatted via the PrettyJSON() routine
 func JSONPrefix() string {
-	return jsonPrefix
+	mu.RLock()
+	defer mu.RUnlock()
+	prefix := jsonPrefix
+	return prefix
 }
 
 // SetJSONPrefix can be used to change the string prefix for any JSON string
 // being formatted via the PrettyJSON() routine.
 func SetJSONPrefix(pfx string) {
-	jsonPrefix = pfx
+	mu.Lock()
+	defer mu.Unlock()
+ 	jsonPrefix = pfx
 }
 
 // JSONRaw can be used to determine if we're in raw JSON output mode (true)
 // or not, true means the PrettyJSON() routine will do nothing
 func JSONRaw() bool {
-	return jsonRaw
+	mu.RLock()
+	defer mu.RUnlock()
+	rawActive := jsonRaw
+	return rawActive
 }
 
 // SetJSONRaw can be used to change the raw JSON output mode so that
@@ -73,6 +88,8 @@ func JSONRaw() bool {
 // lines or if it's just "raw" and lumped together....if raw if false
 // then other sections of this module use PrettyJSON to pretty it up.
 func SetJSONRaw(b bool) {
+	mu.Lock()
+	defer mu.Unlock()
 	jsonRaw = b
 }
 
@@ -83,7 +100,9 @@ func SetJSONRaw(b bool) {
 // related DVLN_JSONPREFIX, DVLN_JSONINDENT to adjust indentation and prefix
 // as well as cfgfile:jsonraw and DVLN_JSONRAW for skipping pretty printing)
 func PrettyJSON(b []byte, fmt ...string) (string, error) {
+	mu.RLock()
 	if jsonRaw {
+		mu.RUnlock()
 		// if there's an override to say pretty JSON is not desired, honor it,
 		// Feature: this could be changed to specifically remove carriage
 		//          returns and shorten output around {} and :'s and such (?)
@@ -91,6 +110,7 @@ func PrettyJSON(b []byte, fmt ...string) (string, error) {
 	}
 	prefix := jsonPrefix
 	indent := str.Pad("", " ", jsonIndentLevel)
+	mu.RUnlock()
 	if len(fmt) == 1 {
 		prefix = fmt[0]
 	} else if len(fmt) == 2 {
